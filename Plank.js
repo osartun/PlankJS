@@ -86,6 +86,40 @@
 		}
 	})();
 
+	var isHTMLElement = (function () {
+		if ("HTMLElement" in window) {
+			// Voilà. Quick and easy. And reliable.
+			return function (el) {return el instanceof HTMLElement;};
+		} else if ((document.createElement("a")).constructor) {
+			// We can access an element's constructor. So, this is not IE7
+			var ElementConstructors = {}, nodeName;
+			return function (el) {
+				return el && typeof el.nodeName === "string" &&
+					 (el instanceof ((nodeName = el.nodeName.toLowerCase()) in ElementConstructors 
+					 	? ElementConstructors[nodeName] 
+					 	: (ElementConstructors[nodeName] = (document.createElement(nodeName)).constructor)))
+			}
+		} else {
+			// Not that reliable, but we don't seem to have another choice. Probably IE7
+			return function (el) {
+				return typeof el === "object" && el.nodeType === 1 && typeof el.nodeName === "string";
+			}
+		}
+	});
+
+	var getElement = function (el) {
+		if (el) {
+			if (isHTMLElement(el)) {
+				return el;
+			} else if (el instanceof P) {
+				return el.element;
+			} else if ("nodeName" in el[0] && isHTMLElement(el[0])) {
+				// This is an Array, a NodeList, a jQuery-object, or the like
+				return el[0];
+			}
+		}
+	};
+
 	var getElementsByClassName = (function () {
 		var d = document;
 		if (d.getElementsByClassName) {
@@ -227,21 +261,12 @@
 		},
 		get: function () {
 			return this.element;
-		},
-		size: function (noCache) {
-			if (noCache || !this.cache.size || !this.preferences.cache) {
-				this.cache.size = {
-					width: this.element.offsetWidth,
-					height: this.element.offsetHeight
-				};
-			}
-			return this.cache.size;
 		}
 	};
 
 	P.noCache = false;
 
-	P.isCacheDisabled = function () {
+	var isCacheDisabled = function () {
 		return P.noCache || (this instanceof P) ? this.noCache : false;
 	};
 
@@ -272,19 +297,7 @@
 		return el;
 	};
 
-	P.getElement = function (el) {
-		if (el) {
-			if (el.nodeName) {
-				return el;
-			} else if (el instanceof P) {
-				return el.element;
-			} else if (window.jQuery && el instanceof window.jQuery) {
-				return el.get(0);
-			} else if (typeof el === "string") {
-				return P.create.call(this, arguments);
-			}
-		}
-	};
+	P.getElement = getElement;
 
 	P.find = function (selector, noCache) {
 		return PNodeCache.get(selector, noCache);
@@ -492,8 +505,8 @@
 		if (P.hasOwnProperty(key) && key !== "prototype") {
 			(function (key) {
 				P.prototype[key] = (retValue.indexOf(key + " ") > -1)
-				? function () {return P[key](this.element, slice.call(arguments));}
-				: function () {P[key](this.element, slice.call(arguments)); return this;};
+				? function () {return P[key].apply(this, this.element, slice.call(arguments));}
+				: function () {P[key].apply(this, this.element, slice.call(arguments)); return this;};
 			})(key);
 		}
 	}
